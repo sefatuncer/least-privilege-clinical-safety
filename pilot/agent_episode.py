@@ -11,6 +11,7 @@ Kullanım: python agent_episode.py <model_etiketi> [n_koşu] [llm_url] [fhir_url
 import json
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
 import httpx
@@ -23,6 +24,31 @@ MAX_TURNS = 8
 LOGS = Path(__file__).parent / "logs"
 
 fhir = httpx.Client(base_url=FHIR, timeout=60, headers={"Accept": "application/fhir+json"})
+
+
+_DASHES = dict.fromkeys(map(ord, "‐‑‒–—―−"), "-")
+
+
+def norm(s: str) -> str:
+    """Eşleştirmeden önce Unicode farklarını giderir.
+
+    Bazı modeller dar bölünmez boşluk (U+202F) ve bölünmez tire (U+2011) gibi tipografik
+    karakterler üretir. Normalizasyon yapılmazsa doğru cevaplar "yanlış" sayılır.
+    """
+    s = unicodedata.normalize("NFKC", s).translate(_DASHES)
+    return " ".join(s.lower().split())
+
+
+def score_answer(answer: str, conditions: list[str], medications: list[str]) -> dict:
+    """Cevapta yer alan gerçek aktif tanı ve ilaçların oranı (normalize edilmiş alt dizgi eşleşmesi).
+
+    Sınırlılık: Yalnız duyarlılığı (recall) ölçer. Yanlış eklemeler ve eşanlamlılar değerlendirilmez.
+    """
+    a = norm(answer or "")
+    ch = [c for c in conditions if c and norm(c) in a]
+    mh = [m for m in medications if m and norm(m) in a]
+    return {"condition_recall": round(len(ch) / max(1, len(conditions)), 2),
+            "medication_recall": round(len(mh) / max(1, len(medications)), 2)}
 
 
 def _text(cc: dict | None) -> str:
@@ -125,14 +151,11 @@ def run_episode(client: httpx.Client, pt: dict) -> dict:
                 result = {"error": str(ex)}
             messages.append({"role": "tool", "tool_call_id": c.get("id", ""), "content": json.dumps(result)})
     wall = time.perf_counter() - t0
-    ans = (final or "").lower()
-    cond_hits = [c for c in pt["conditions"] if c and c.lower() in ans]
-    med_hits = [m for m in pt["medications"] if m and m.lower() in ans]
-    return {"patient": f"{pt['given']} {pt['family']}", "wall_s": round(wall, 1), **stats,
-            "finished": final is not None,
-            "condition_recall": round(len(cond_hits) / max(1, len(pt["conditions"])), 2),
-            "medication_recall": round(len(med_hits) / max(1, len(pt["medications"])), 2),
+    return {"patient": f"{pt['given']} {pt['family']}", "patient_id": pt["id"],
+            "wall_s": round(wall, 1), **stats, "finished": final is not None,
+            **score_answer(final, pt["conditions"], pt["medications"]),
             "n_true_conditions": len(pt["conditions"]), "n_true_medications": len(pt["medications"]),
+            "true_conditions": pt["conditions"], "true_medications": pt["medications"],
             "transcript": messages}
 
 
