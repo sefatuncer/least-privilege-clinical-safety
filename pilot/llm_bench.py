@@ -1,6 +1,8 @@
 """llama-server (OpenAI uyumlu API) için hız ölçümü: prompt işleme ve üretim hızı (token/s).
 
-Gerçekçi bir girdi kullanır: bir Synthea hastasının FHIR kaynaklarından kesilmiş ~N token'lık metin.
+Gerçekçi bir girdi kullanır: bir Synthea hastasının FHIR kaynaklarından kesilmiş metin.
+Uzunluk KARAKTER cinsinden hedeflenir; gerçek token sayısı modele göre değişir ve sunucunun
+usage/timings alanlarından raporlanır (ör. 12.000 karakter = Gemma'da 6.313, gpt-oss'ta 4.818 token).
 Kullanım: python llm_bench.py <model_etiketi> <synthea_fhir_klasoru> [base_url] [hedef_prompt_karakteri]
 """
 import json
@@ -13,7 +15,7 @@ import httpx
 LABEL = sys.argv[1]
 FHIR_DIR = Path(sys.argv[2])
 BASE = sys.argv[3] if len(sys.argv) > 3 else "http://127.0.0.1:8091"
-TARGET_CHARS = int(sys.argv[4]) if len(sys.argv) > 4 else 12000  # ~3k token
+TARGET_CHARS = int(sys.argv[4]) if len(sys.argv) > 4 else 12000  # karakter (token değil)
 
 
 def build_context() -> str:
