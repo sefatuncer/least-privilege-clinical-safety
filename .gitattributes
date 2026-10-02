@@ -1,0 +1,7 @@
+# Satır sonlarını depo içinde LF olarak tut. Kabuk betikleri Docker (Linux) içinde çalışır.
+* text=auto eol=lf
+*.sh text eol=lf
+*.spthy text eol=lf
+*.gguf binary
+*.jar binary
+*.pdf binary

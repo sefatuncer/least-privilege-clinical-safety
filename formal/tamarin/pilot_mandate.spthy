@@ -1,0 +1,86 @@
+theory PilotMandate
+begin
+
+/*
+  Fizibilite pilotu için basitleştirilmiş model (nihai model değildir).
+  Bir yetkilendirme sunucusu (AS), ajanın anahtarına, hastaya ve amaca bağlı
+  bir yetki belgesi (mandate) düzenler. PEP her istek için taze bir meydan
+  okuma (nonce) gönderir. Ajan, bu nonce'u yetki belgesine bağlayan bir sahiplik
+  kanıtı (PoP) imzalar.
+  Saldırgan modeli: Dolev-Yao. Uzun dönemli anahtarlar sızdırılabilir (Reveal).
+*/
+
+builtins: signing
+
+rule Register_pk:
+  [ Fr(~ltk) ]
+  -->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ] --[ Reveal(A) ]-> [ Out(ltk) ]
+
+rule AS_issue:
+  let m = <'mandate', $AS, $Agent, $Patient, $Purpose, ~mid>
+  in
+  [ !Ltk($AS, ltkAS), Fr(~mid) ]
+  --[ Issued($AS, $Agent, $Patient, $Purpose, ~mid) ]->
+  [ Out(<m, sign(m, ltkAS)>) ]
+
+rule PEP_challenge:
+  [ Fr(~n) ]
+  --[ Challenge($PEP, ~n) ]->
+  [ PEPWait($PEP, ~n), Out(~n) ]
+
+rule Agent_respond:
+  let m = <'mandate', AS, $Agent, P, Pu, mid>
+  in
+  [ In(<m, sig>), In(n), !Ltk($Agent, ltkAg) ]
+  --[ Present($Agent, AS, P, Pu, mid, n) ]->
+  [ Out(<m, sig, n, sign(<'pop', n, mid>, ltkAg)>) ]
+
+rule PEP_accept:
+  let m = <'mandate', AS, Agent, P, Pu, mid>
+  in
+  [ PEPWait($PEP, n), In(<m, sig, n, popsig>), !Pk(AS, pkAS), !Pk(Agent, pkAg) ]
+  --[ Accept($PEP, AS, Agent, P, Pu, mid, n),
+      Eq(verify(sig, m, pkAS), true),
+      Eq(verify(popsig, <'pop', n, mid>, pkAg), true) ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @i ==> x = y"
+
+// Saldırgan anahtar sızdırmadan, protokolün dürüst bir koşusu var mı?
+lemma executable:
+  exists-trace
+  "Ex PEP AS Agent P Pu mid n #i.
+     Accept(PEP, AS, Agent, P, Pu, mid, n) @i
+   & not (Ex A #r. Reveal(A) @r)"
+
+// Yetki belgesinin özgünlüğü: kabul edilen her yetki belgesi (hasta ve amaç dahil)
+// AS tarafından düzenlenmiştir. Tek istisna, AS anahtarının sızdırılmış olması.
+lemma mandate_authentic:
+  "All PEP AS Agent P Pu mid n #i.
+     Accept(PEP, AS, Agent, P, Pu, mid, n) @i
+     ==> (Ex #j. Issued(AS, Agent, P, Pu, mid) @j & #j < #i)
+       | (Ex #r. Reveal(AS) @r & #r < #i)"
+
+// Anahtar bağı: kabul edilen her sunum, yetki belgesinde adı geçen ajandan gelir.
+// Tek istisna, ajanın anahtarının sızdırılmış olması.
+lemma key_binding:
+  "All PEP AS Agent P Pu mid n #i.
+     Accept(PEP, AS, Agent, P, Pu, mid, n) @i
+     ==> (Ex #j. Present(Agent, AS, P, Pu, mid, n) @j & #j < #i)
+       | (Ex #r. Reveal(Agent) @r & #r < #i)"
+
+// Dar özellik: aynı PEP/nonce ve aynı yetki belgesi alanları için en fazla bir kabul.
+// Genel bir "replay yok" garantisi DEĞİLDİR (nonce tekilliği, oturum karışması ve
+// istek bağlama ayrıca modellenmeli).
+lemma one_accept_per_challenge:
+  "All PEP AS Agent P Pu mid n #i #k.
+     Accept(PEP, AS, Agent, P, Pu, mid, n) @i
+   & Accept(PEP, AS, Agent, P, Pu, mid, n) @k
+     ==> #i = #k"
+
+end

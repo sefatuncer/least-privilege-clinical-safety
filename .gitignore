@@ -1,0 +1,35 @@
+# BEYAZ LİSTE: Bu depoya yalnız KOD ve TESTLER girer (Sefa, 3 Ekim 2026).
+# Makale dosyaları (plan, notlar, kaynakça, incelemeler, taslaklar, PDF'ler) varsayılan olarak dışarıda kalır.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/tasks.py
+!/pilot/
+!/formal/
+!/testbed/
+!/agents/
+!/eval/
+!/analysis/
+!/tests/
+!/synthea/
+!/models/
+
+# --- İzin verilen klasörler içinde de kod olmayanlar dışarıda ---
+# Ölçüm çıktıları ve kayıtlar (araştırma verisi; makale artefaktıyla ayrıca yayımlanır)
+pilot/logs/
+pilot/data/
+pilot/docker-baseline/
+formal/**/*.out
+results/
+# Büyük ikili dosyalar ve üretilen veri (yalnız SHA256 manifestleri girer)
+models/*.gguf
+synthea/bin/*.jar
+synthea/output/
+# Kişisel veri ve belgeler
+*.pdf
+*.docx
+# Python
+__pycache__/
+*.pyc
+.venv/
